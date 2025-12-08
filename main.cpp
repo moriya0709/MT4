@@ -29,6 +29,11 @@ struct Quaternion {
 			w * q.w - x * q.x - y * q.y - z * q.z
 		};
 	}
+
+	// 単項マイナス演算子
+	Quaternion operator-=(const Quaternion& q) const {
+		return { -q.x, -q.y, -q.z, -q.w };
+	}
 };
 
 
@@ -331,16 +336,62 @@ void VectorScreenPrintf(int x, int y, const Vector3& vector, const char* label) 
 
 }
 
+// 球面線形補間
+Quaternion Slerp(const Quaternion& q0, const Quaternion& q1, float t) {
+	float dot = q0.x * q1.x + q0.y * q1.y + q0.z * q1.z + q0.w * q1.w;
+
+	Quaternion q1Copy = q1;
+
+	// 最短補間
+	if (dot < 0.0f) {
+		dot = -dot;
+		q1Copy = { -q1.x, -q1.y, -q1.z, -q1.w };
+	}
+
+	const float epsilon = 1e-6f;
+
+	// 角度が小さい場合は Lerp で近似
+	if (1.0f - dot < epsilon) {
+		Quaternion result = {
+			q0.x + t * (q1Copy.x - q0.x),
+			q0.y + t * (q1Copy.y - q0.y),
+			q0.z + t * (q1Copy.z - q0.z),
+			q0.w + t * (q1Copy.w - q0.w)
+		};
+		return Normalize(result);
+	}
+
+	float theta = std::acos(dot);
+	float sinTheta = std::sin(theta);
+
+	float w0 = std::sin((1.0f - t) * theta) / sinTheta;
+	float w1 = std::sin(t * theta) / sinTheta;
+
+	Quaternion result = {
+		w0 * q0.x + w1 * q1Copy.x,
+		w0 * q0.y + w1 * q1Copy.y,
+		w0 * q0.z + w1 * q1Copy.z,
+		w0 * q0.w + w1 * q1Copy.w
+	};
+
+	// ※コレが重要！
+	return Normalize(result);
+}
+
+
 int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 
 	// ライブラリの初期化
 	Novice::Initialize(kWindowTitle, 1280, 720);
 
-	Quaternion rotation = MakeRotateAxisAngleQuaternion(Normalize(Vector3{ 1.0f,0.4f,-0.2f }), 0.45f);
-	Vector3 pointY = { 2.1f,-0.9f,1.3f };
-	Matrix4x4 rotateMatrix = MakeRotateMatrix(rotation);
-	Vector3 rotateByQuaternion = RotateVector(pointY, rotation);
-	Vector3 rotateByMatrix = Transform(pointY, rotateMatrix);
+	Quaternion rotation0 = MakeRotateAxisAngleQuaternion({ 0.71f,0.71f,0.0f }, 0.3f);
+	Quaternion rotation1 = MakeRotateAxisAngleQuaternion({ 0.71f,0.0f,0.71f }, 3.141592f);
+
+	Quaternion interpolate0 = Slerp(rotation0, rotation1, 0.0f);
+	Quaternion interpolate1 = Slerp(rotation0, rotation1, 0.3f);
+	Quaternion interpolate2 = Slerp(rotation0, rotation1, 0.5f);
+	Quaternion interpolate3 = Slerp(rotation0, rotation1, 0.7f);
+	Quaternion interpolate4 = Slerp(rotation0, rotation1, 1.0f);
 
 	// キー入力結果を受け取る箱
 	char keys[256] = { 0 };
@@ -367,11 +418,12 @@ int WINAPI WinMain(_In_ HINSTANCE, _In_opt_ HINSTANCE, _In_ LPSTR, _In_ int) {
 		/// ↓描画処理ここから
 		///
 
-		QuaternionScreenPrintf(0, kRowHeight * 0, rotation, " : rotation");
-		MatrixScreenPrint(0, kRowHeight * 1, rotateMatrix, "rotateMatrix");
-		VectorScreenPrintf(0, kRowHeight * 7, rotateByQuaternion, " : rotateByQuaternion");
-		VectorScreenPrintf(0, kRowHeight * 8, rotateByMatrix, " : rotateByMatrix");
-
+		QuaternionScreenPrintf(0, kRowHeight * 0, interpolate0, " : interpolate0,Slerp(q0,q1,0.0f)");
+		QuaternionScreenPrintf(0, kRowHeight * 1, interpolate1, " : interpolate1,Slerp(q0,q1,0.3f)");
+		QuaternionScreenPrintf(0, kRowHeight * 2, interpolate2, " : interpolate2,Slerp(q0,q1,0.5f)");
+		QuaternionScreenPrintf(0, kRowHeight * 3, interpolate3, " : interpolate3,Slerp(q0,q1,0.7f)");
+		QuaternionScreenPrintf(0, kRowHeight * 4, interpolate4, " : interpolate4,Slerp(q0,q1,1.0f)");
+		
 		///
 		/// ↑描画処理ここまで
 		///
